@@ -1,0 +1,94 @@
+name: Generate Device Tree A02
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-tree:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Device Repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Create Device Tree Structure
+        run: |
+          DEVICE=a02
+          VENDOR=samsung
+          
+          # 1. AndroidProducts.mk
+          cat <<EOF > AndroidProducts.mk
+          PRODUCT_MAKEFILES := \$(LOCAL_DIR)/lineage_$DEVICE.mk
+          COMMON_LUNCH_CHOICES := lineage_$DEVICE-userdebug
+          EOF
+
+          # 2. BoardConfig.mk (Rangka Utama)
+          cat <<EOF > BoardConfig.mk
+          DEVICE_PATH := device/$VENDOR/$DEVICE
+
+          # Architecture
+          TARGET_ARCH := arm
+          TARGET_ARCH_VARIANT := armv8-a
+          TARGET_CPU_ABI := armeabi-v7a
+          TARGET_CPU_ABI2 := armeabi
+          TARGET_CPU_VARIANT := generic
+          TARGET_CPU_SMP := true
+
+          # Kernel
+          TARGET_KERNEL_CONFIG := a02_defconfig
+          TARGET_KERNEL_SOURCE := kernel/$VENDOR/$DEVICE
+          BOARD_KERNEL_IMAGE_NAME := zImage
+
+          # Assert
+          TARGET_OTA_ASSERT_DEVICE := $DEVICE
+
+          # Partisi (Sesuaikan dengan ukuran dump lo nanti)
+          BOARD_FLASH_BLOCK_SIZE := 131072
+          BOARD_BOOTIMAGE_PARTITION_SIZE := 33554432
+          BOARD_RECOVERYIMAGE_PARTITION_SIZE := 33554432
+          BOARD_SYSTEMIMAGE_PARTITION_SIZE := 3221225472
+          BOARD_USERDATAIMAGE_PARTITION_SIZE := 10737418240
+
+          # Platform
+          TARGET_BOARD_PLATFORM := mt6739
+          
+          # Include Vendor Config
+          include vendor/$VENDOR/$DEVICE/BoardConfigVendor.mk
+          EOF
+
+          # 3. lineage_a02.mk (Identitas ROM)
+          cat <<EOF > lineage_$DEVICE.mk
+          \$(call inherit-product, \$(SRC_TARGET_DIR)/product/full_base_telephony.mk)
+
+          # Inherit from device tree
+          \$(call inherit-product, device/$VENDOR/$DEVICE/device.mk)
+
+          # Inherit from vendor tree (PERKAWINAN DI SINI)
+          \$(call inherit-product, vendor/$VENDOR/$DEVICE/$DEVICE-vendor.mk)
+
+          PRODUCT_NAME := lineage_$DEVICE
+          PRODUCT_DEVICE := $DEVICE
+          PRODUCT_BRAND := $VENDOR
+          PRODUCT_MODEL := Galaxy A02
+          PRODUCT_MANUFACTURER := $VENDOR
+          EOF
+
+          # 4. device.mk (Daftar fitur hardware)
+          cat <<EOF > device.mk
+          LOCAL_PATH := device/$VENDOR/$DEVICE
+
+          # Audio / Graphics / Sensors (Standard MTK)
+          PRODUCT_PACKAGES += \\
+              android.hardware.audio.service \\
+              android.hardware.graphics.composer@2.1-service \\
+              android.hardware.sensors@1.0-service
+          EOF
+
+      - name: Commit and Push
+        run: |
+          git config --global user.name "rdbckp-bot"
+          git config --global user.email "rdbckp@users.noreply.github.com"
+          git add .
+          git commit -m "Initialize Device Tree for A02 [LineageOS 18.1]"
+          git push origin main
