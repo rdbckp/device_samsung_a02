@@ -1,7 +1,11 @@
-name: Generate Device Tree A02
+name: Generate Device Tree A02 Final
 
 on:
   workflow_dispatch:
+
+# JURUS SAKTI BIAR GAK KENA 403
+permissions:
+  contents: write
 
 jobs:
   build-tree:
@@ -10,7 +14,6 @@ jobs:
       - name: Checkout Device Repo
         uses: actions/checkout@v4
         with:
-          # Pake GITHUB_TOKEN bawaan biar gak minta secret manual
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Device Tree Structure
