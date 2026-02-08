@@ -10,7 +10,8 @@ jobs:
       - name: Checkout Device Repo
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GH_TOKEN }}
+          # Pake GITHUB_TOKEN bawaan biar gak minta secret manual
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Device Tree Structure
         run: |
@@ -18,77 +19,36 @@ jobs:
           VENDOR=samsung
           
           # 1. AndroidProducts.mk
-          cat <<EOF > AndroidProducts.mk
-          PRODUCT_MAKEFILES := \$(LOCAL_DIR)/lineage_$DEVICE.mk
-          COMMON_LUNCH_CHOICES := lineage_$DEVICE-userdebug
-          EOF
+          printf "PRODUCT_MAKEFILES := \$(LOCAL_DIR)/lineage_%s.mk\n" "$DEVICE" > AndroidProducts.mk
+          printf "COMMON_LUNCH_CHOICES := lineage_%s-userdebug\n" "$DEVICE" >> AndroidProducts.mk
 
-          # 2. BoardConfig.mk (Rangka Utama)
-          cat <<EOF > BoardConfig.mk
-          DEVICE_PATH := device/$VENDOR/$DEVICE
+          # 2. BoardConfig.mk
+          printf "DEVICE_PATH := device/%s/%s\n\n" "$VENDOR" "$DEVICE" > BoardConfig.mk
+          printf "# Architecture\nTARGET_ARCH := arm\nTARGET_ARCH_VARIANT := armv8-a\n" >> BoardConfig.mk
+          printf "TARGET_CPU_ABI := armeabi-v7a\nTARGET_CPU_ABI2 := armeabi\n" >> BoardConfig.mk
+          printf "TARGET_CPU_VARIANT := generic\nTARGET_CPU_SMP := true\n\n" >> BoardConfig.mk
+          printf "# Kernel\nTARGET_KERNEL_CONFIG := a02_defconfig\n" >> BoardConfig.mk
+          printf "TARGET_KERNEL_SOURCE := kernel/%s/%s\n" "$VENDOR" "$DEVICE" >> BoardConfig.mk
+          printf "BOARD_KERNEL_IMAGE_NAME := zImage\n\n" >> BoardConfig.mk
+          printf "# Platform\nTARGET_BOARD_PLATFORM := mt6739\n\n" >> BoardConfig.mk
+          printf "# Include Vendor Config\n-include vendor/%s/%s/BoardConfigVendor.mk\n" "$VENDOR" "$DEVICE" >> BoardConfig.mk
 
-          # Architecture
-          TARGET_ARCH := arm
-          TARGET_ARCH_VARIANT := armv8-a
-          TARGET_CPU_ABI := armeabi-v7a
-          TARGET_CPU_ABI2 := armeabi
-          TARGET_CPU_VARIANT := generic
-          TARGET_CPU_SMP := true
+          # 3. lineage_a02.mk
+          printf "\$(call inherit-product, \$(SRC_TARGET_DIR)/product/full_base_telephony.mk)\n\n" > lineage_$DEVICE.mk
+          printf "# Inherit from device tree\n\$(call inherit-product, device/%s/%s/device.mk)\n" "$VENDOR" "$DEVICE" >> lineage_$DEVICE.mk
+          printf "# Inherit from vendor tree\n\$(call inherit-product, vendor/%s/%s/%s-vendor.mk)\n\n" "$VENDOR" "$DEVICE" "$DEVICE" >> lineage_$DEVICE.mk
+          printf "PRODUCT_NAME := lineage_%s\nPRODUCT_DEVICE := %s\n" "$DEVICE" "$DEVICE" >> lineage_$DEVICE.mk
+          printf "PRODUCT_BRAND := %s\nPRODUCT_MODEL := Galaxy A02\n" "$VENDOR" >> lineage_$DEVICE.mk
+          printf "PRODUCT_MANUFACTURER := %s\n" "$VENDOR" >> lineage_$DEVICE.mk
 
-          # Kernel
-          TARGET_KERNEL_CONFIG := a02_defconfig
-          TARGET_KERNEL_SOURCE := kernel/$VENDOR/$DEVICE
-          BOARD_KERNEL_IMAGE_NAME := zImage
-
-          # Assert
-          TARGET_OTA_ASSERT_DEVICE := $DEVICE
-
-          # Partisi (Sesuaikan dengan ukuran dump lo nanti)
-          BOARD_FLASH_BLOCK_SIZE := 131072
-          BOARD_BOOTIMAGE_PARTITION_SIZE := 33554432
-          BOARD_RECOVERYIMAGE_PARTITION_SIZE := 33554432
-          BOARD_SYSTEMIMAGE_PARTITION_SIZE := 3221225472
-          BOARD_USERDATAIMAGE_PARTITION_SIZE := 10737418240
-
-          # Platform
-          TARGET_BOARD_PLATFORM := mt6739
-          
-          # Include Vendor Config
-          include vendor/$VENDOR/$DEVICE/BoardConfigVendor.mk
-          EOF
-
-          # 3. lineage_a02.mk (Identitas ROM)
-          cat <<EOF > lineage_$DEVICE.mk
-          \$(call inherit-product, \$(SRC_TARGET_DIR)/product/full_base_telephony.mk)
-
-          # Inherit from device tree
-          \$(call inherit-product, device/$VENDOR/$DEVICE/device.mk)
-
-          # Inherit from vendor tree (PERKAWINAN DI SINI)
-          \$(call inherit-product, vendor/$VENDOR/$DEVICE/$DEVICE-vendor.mk)
-
-          PRODUCT_NAME := lineage_$DEVICE
-          PRODUCT_DEVICE := $DEVICE
-          PRODUCT_BRAND := $VENDOR
-          PRODUCT_MODEL := Galaxy A02
-          PRODUCT_MANUFACTURER := $VENDOR
-          EOF
-
-          # 4. device.mk (Daftar fitur hardware)
-          cat <<EOF > device.mk
-          LOCAL_PATH := device/$VENDOR/$DEVICE
-
-          # Audio / Graphics / Sensors (Standard MTK)
-          PRODUCT_PACKAGES += \\
-              android.hardware.audio.service \\
-              android.hardware.graphics.composer@2.1-service \\
-              android.hardware.sensors@1.0-service
-          EOF
+          # 4. device.mk
+          printf "LOCAL_PATH := device/%s/%s\n\n" "$VENDOR" "$DEVICE" > device.mk
+          printf "PRODUCT_PACKAGES += \\\\\n    android.hardware.audio.service \\\\\n    android.hardware.graphics.composer@2.1-service \\\\\n    android.hardware.sensors@1.0-service\n" >> device.mk
 
       - name: Commit and Push
         run: |
-          git config --global user.name "rdbckp-bot"
-          git config --global user.email "rdbckp@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Initialize Device Tree for A02 [LineageOS 18.1]"
+          git commit -m "Initialize Device Tree for A02 [LineageOS 18.1]" || echo "No changes to commit"
           git push origin main
